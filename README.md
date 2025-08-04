@@ -1,36 +1,54 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
 
-## Getting Started
+# 🩺 Doctor Appointment Booking System
 
-First, run the development server:
+A full-stack web application for managing doctor appointments, availability, and scheduling using **Prisma ORM**, **PostgreSQL**, and **Next.js**.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+---
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## ✨ Features
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+- Doctor registration with verification system
+- Patients can view doctor profiles and book appointments
+- Doctors can define their **availability time slots**
+- Dynamic generation of available 30-minute appointment slots
+- Prevention of overlapping appointments
+- Credit-based transaction system for bookings
+- Admin-managed payouts to doctors
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+---
 
-## Learn More
+## 🧱 Tech Stack
 
-To learn more about Next.js, take a look at the following resources:
+- **Backend:** Node.js, Prisma ORM, PostgreSQL
+- **Frontend:** Next.js (App Router), React, Tailwind CSS
+- **Auth:** Clerk (or your chosen auth provider)
+- **Date Utilities:** `date-fns`
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+---
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 🗃️ Database Models
 
-## Deploy on Vercel
+### User
+- `id`, `email`, `role` (`PATIENT`, `DOCTOR`, `ADMIN`)
+- `verificationStatus`: `PENDING | VERIFIED | REJECTED`
+- Doctor-specific fields: `specialty`, `experience`, `description`
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Availability
+- `doctorId`, `startTime`, `endTime`, `status`: `AVAILABLE | BOOKED | BLOCKED`
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Appointment
+- `patientId`, `doctorId`, `startTime`, `endTime`, `status`: `SCHEDULED | COMPLETED | CANCELLED`
+
+### CreditTransaction
+- Handles appointment charges, credit purchases, admin adjustments
+
+### Payout
+- For doctors to withdraw earned credits
+
+---
+
+## 🔁 Available Time Slot Logic
+
+Implemented in:
+```ts
+export async function getAvailableTimeSlots(doctorId)
