@@ -285,37 +285,41 @@ export async function getDoctorById(doctorId) {
  */
 export async function getAvailableTimeSlots(doctorId) {
   try {
-    // Validate doctor existence and verification
+    // 1. Validate doctor existence and verification
     const doctor = await db.user.findUnique({
       where: {
         id: doctorId,
-        role: "DOCTOR",
-        verificationStatus: "VERIFIED",
       },
     });
 
-    if (!doctor) {
+    if (!doctor || doctor.role !== "DOCTOR" || doctor.verificationStatus !== "VERIFIED") {
       throw new Error("Doctor not found or not verified");
     }
 
-    // Fetch a single availability record
-    const availability = await db.availability.findFirst({
+    const now = new Date();
+    const days = [now, addDays(now, 1), addDays(now, 2), addDays(now, 3)];
+    const lastDay = endOfDay(days[3]);
+
+    // 2. Fetch all availabilities for next 4 days
+    const availabilities = await db.availability.findMany({
       where: {
         doctorId: doctor.id,
         status: "AVAILABLE",
+        startTime: {
+          lt: lastDay,
+        },
+        endTime: {
+          gt: now,
+        },
       },
     });
 
-    if (!availability) {
-      throw new Error("No availability set by doctor");
+    if (!availabilities.length) {
+      console.warn("Doctor has no availability set.");
+      return { days: [] }; // ✅ Gracefully return empty result
     }
 
-    // Get the next 4 days
-    const now = new Date();
-    const days = [now, addDays(now, 1), addDays(now, 2), addDays(now, 3)];
-
-    // Fetch existing appointments for the doctor over the next 4 days
-    const lastDay = endOfDay(days[3]);
+    // 3. Fetch scheduled appointments
     const existingAppointments = await db.appointment.findMany({
       where: {
         doctorId: doctor.id,
@@ -328,76 +332,60 @@ export async function getAvailableTimeSlots(doctorId) {
 
     const availableSlotsByDay = {};
 
-    // For each of the next 4 days, generate available slots
+    // 4. Loop through days and availabilities
     for (const day of days) {
       const dayString = format(day, "yyyy-MM-dd");
       availableSlotsByDay[dayString] = [];
 
-      // Create a copy of the availability start/end times for this day
-      const availabilityStart = new Date(availability.startTime);
-      const availabilityEnd = new Date(availability.endTime);
+      for (const availability of availabilities) {
+        const availabilityStart = new Date(availability.startTime);
+        const availabilityEnd = new Date(availability.endTime);
 
-      // Set the day to the current day we're processing
-      availabilityStart.setFullYear(
-        day.getFullYear(),
-        day.getMonth(),
-        day.getDate()
-      );
-      availabilityEnd.setFullYear(
-        day.getFullYear(),
-        day.getMonth(),
-        day.getDate()
-      );
+        // Adjust availability to current day
+        availabilityStart.setFullYear(day.getFullYear(), day.getMonth(), day.getDate());
+        availabilityEnd.setFullYear(day.getFullYear(), day.getMonth(), day.getDate());
 
-      let current = new Date(availabilityStart);
-      const end = new Date(availabilityEnd);
+        if (availabilityEnd <= availabilityStart) continue;
 
-      while (
-        isBefore(addMinutes(current, 30), end) ||
-        +addMinutes(current, 30) === +end
-      ) {
-        const next = addMinutes(current, 30);
+        let current = new Date(availabilityStart);
+        const end = new Date(availabilityEnd);
 
-        // Skip past slots
-        if (isBefore(current, now)) {
-          current = next;
-          continue;
-        }
+        while (isBefore(addMinutes(current, 30), end) || +addMinutes(current, 30) === +end) {
+          const next = addMinutes(current, 30);
 
-        const overlaps = existingAppointments.some((appointment) => {
-          const aStart = new Date(appointment.startTime);
-          const aEnd = new Date(appointment.endTime);
+          if (isBefore(current, now)) {
+            current = next;
+            continue;
+          }
 
-          return (
-            (current >= aStart && current < aEnd) ||
-            (next > aStart && next <= aEnd) ||
-            (current <= aStart && next >= aEnd)
-          );
-        });
-
-        if (!overlaps) {
-          availableSlotsByDay[dayString].push({
-            startTime: current.toISOString(),
-            endTime: next.toISOString(),
-            formatted: `${format(current, "h:mm a")} - ${format(
-              next,
-              "h:mm a"
-            )}`,
-            day: format(current, "EEEE, MMMM d"),
+          const overlaps = existingAppointments.some((appointment) => {
+            const aStart = new Date(appointment.startTime);
+            const aEnd = new Date(appointment.endTime);
+            return (
+              (current >= aStart && current < aEnd) ||
+              (next > aStart && next <= aEnd) ||
+              (current <= aStart && next >= aEnd)
+            );
           });
-        }
 
-        current = next;
+          if (!overlaps) {
+            availableSlotsByDay[dayString].push({
+              startTime: current.toISOString(),
+              endTime: next.toISOString(),
+              formatted: `${format(current, "h:mm a")} - ${format(next, "h:mm a")}`,
+              day: format(current, "EEEE, MMMM d"),
+            });
+          }
+
+          current = next;
+        }
       }
     }
 
-    // Convert to array of slots grouped by day for easier consumption by the UI
+    // 5. Format final result
     const result = Object.entries(availableSlotsByDay).map(([date, slots]) => ({
       date,
-      displayDate:
-        slots.length > 0
-          ? slots[0].day
-          : format(new Date(date), "EEEE, MMMM d"),
+      displayDate: slots.length > 0 ? slots[0].day : format(new Date(date), "EEEE, MMMM d"),
       slots,
     }));
 
