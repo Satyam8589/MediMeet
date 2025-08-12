@@ -1,4 +1,4 @@
-
+![image alt](https://github.com/user-attachments/assets/2ed7166f-09ea-4ca6-81c1-3eaa946290b3)
 # 🩺 Doctor Appointment Booking System
 
 A full-stack web application for managing doctor appointments, availability, and scheduling using **Prisma ORM**, **PostgreSQL**, and **Next.js**.
